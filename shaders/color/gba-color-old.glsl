@@ -1,15 +1,16 @@
 /*
-   Author: rsn8887 (based on TheMaister)
+   Author: Pokefan531
    License: Public domain
-
-   This is an integer prescale filter that should be combined
-   with a bilinear hardware filtering (GL_BILINEAR filter or some such) to achieve
-   a smooth scaling result with minimum blur. This is good for pixelgraphics
-   that are scaled by non-integer factors.
-   
-   The prescale factor and texel coordinates are precalculated
-   in the vertex shader for speed.
 */
+
+// Shader that replicates the LCD dynamics from a GameBoy Advance
+
+vec3 grayscale(vec3 col)
+{
+    // Non-conventional way to do grayscale,
+    // but bSNES uses this as grayscale value.
+    return vec3(dot(col, vec3(0.2126, 0.7152, 0.0722)));
+}
 
 #if defined(VERTEX)
 
@@ -42,22 +43,11 @@ uniform COMPAT_PRECISION vec2 OutputSize;
 uniform COMPAT_PRECISION vec2 TextureSize;
 uniform COMPAT_PRECISION vec2 InputSize;
 
-// vertex compatibility #defines
-#define vTexCoord TEX0.xy
-#define SourceSize vec4(TextureSize, 1.0 / TextureSize) //either TextureSize or InputSize
-#define outsize vec4(OutputSize, 1.0 / OutputSize)
-
-COMPAT_VARYING vec2 precalc_texel;
-COMPAT_VARYING vec2 precalc_scale;
-
 void main()
 {
     gl_Position = MVPMatrix * VertexCoord;
     COL0 = COLOR;
     TEX0.xy = TexCoord.xy;
-
-    precalc_texel = vTexCoord * SourceSize.xy;
-    precalc_scale = max(floor(outsize.xy / InputSize.xy), vec2(1.0, 1.0));
 }
 
 #elif defined(FRAGMENT)
@@ -91,33 +81,47 @@ uniform COMPAT_PRECISION vec2 InputSize;
 uniform sampler2D Texture;
 COMPAT_VARYING vec4 TEX0;
 
-// fragment compatibility #defines
+// compatibility #defines
 #define Source Texture
 #define vTexCoord TEX0.xy
 #define texture(c, d) COMPAT_TEXTURE(c, d)
 #define SourceSize vec4(TextureSize, 1.0 / TextureSize) //either TextureSize or InputSize
 #define outsize vec4(OutputSize, 1.0 / OutputSize)
 
-COMPAT_VARYING vec2 precalc_texel;
-COMPAT_VARYING vec2 precalc_scale;
-
 void main()
 {
-   vec2 texel = precalc_texel;
-   vec2 scale = precalc_scale;
+//part 1
+    float saturation    = 1.0;
+    float Display_gamma = 1.02;
+    float CRT_gamma     = 2.4;
+    float luminance     = 1.0;
 
-   vec2 texel_floored = floor(texel);
-   vec2 s = fract(texel);
-   vec2 region_range = 0.5 - 0.5 / scale;
+    vec3 gamma  = vec3(CRT_gamma / Display_gamma);
+    vec3 res    = texture(Source, vTexCoord).xyz;
+    res         = mix(grayscale(res), res, saturation); // Apply saturation
+    res         = pow(res, gamma.rgb); // Apply gamma
+    vec4 c      = vec4(clamp(res * luminance, 0.0, 1.0), 1.0);
 
-   // Figure out where in the texel to sample to get correct pre-scaled bilinear.
-   // Uses the hardware bilinear interpolator to avoid having to sample 4 times manually.
+//part 2
+    float r = c.x;
+    float g = c.y;
+    float b = c.z;
+    float a = c.w;
+    float w = r * 0.714 + g * 0.251 + b * 0.000;
+    float q = r * 0.071 + g * 0.643 + b * 0.216;
+    float e = r * 0.071 + g * 0.216 + b * 0.643;
 
-   vec2 center_dist = s - 0.5;
-   vec2 f = (center_dist - clamp(center_dist, -region_range, region_range)) * scale + 0.5;
+//part 3
+    saturation      = 1.0;
+    Display_gamma   = 3.6;
+    CRT_gamma       = 2.4;
+    luminance       = 1.01;
 
-   vec2 mod_texel = texel_floored + f;
-
-   FragColor = vec4(texture(Source, mod_texel / SourceSize.xy).rgb, 1.0);
+    res     = vec3(w, q, e);
+    gamma   = gamma = vec3(CRT_gamma / Display_gamma);
+    res     = mix(grayscale(res), res, saturation); // Apply saturation
+    res     = pow(res, gamma.rgb); // Apply gamma
+    
+    FragColor = vec4(clamp(res * luminance, 0.0, 1.0), 1.0);
 } 
 #endif

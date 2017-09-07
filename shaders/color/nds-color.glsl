@@ -1,15 +1,37 @@
 /*
-   Author: rsn8887 (based on TheMaister)
+   Shader Modified: Pokefan531
+   Color Mangler
+   Author: hunterk
    License: Public domain
-
-   This is an integer prescale filter that should be combined
-   with a bilinear hardware filtering (GL_BILINEAR filter or some such) to achieve
-   a smooth scaling result with minimum blur. This is good for pixelgraphics
-   that are scaled by non-integer factors.
-   
-   The prescale factor and texel coordinates are precalculated
-   in the vertex shader for speed.
 */
+// Shader that replicates the LCD dynamics from a Nintendo DS Phat
+
+// Compatibility #ifdefs needed for parameters
+#ifdef GL_ES
+#define COMPAT_PRECISION mediump
+#else
+#define COMPAT_PRECISION
+#endif
+
+#define target_gamma 2.2
+#define display_gamma 2.2
+#define sat 1.0
+#define lum 1.0
+#define contrast 1.0
+#define blr 0.0
+#define blg 0.0
+#define blb 0.0
+#define r 0.82
+#define g 0.66
+#define b 0.81
+#define rg 0.085
+#define rb 0.085
+#define gr 0.25
+#define gb 0.105
+#define br -0.07
+#define bg 0.255
+#define overscan_percent_x 0.0
+#define overscan_percent_y 0.0
 
 #if defined(VERTEX)
 
@@ -42,22 +64,11 @@ uniform COMPAT_PRECISION vec2 OutputSize;
 uniform COMPAT_PRECISION vec2 TextureSize;
 uniform COMPAT_PRECISION vec2 InputSize;
 
-// vertex compatibility #defines
-#define vTexCoord TEX0.xy
-#define SourceSize vec4(TextureSize, 1.0 / TextureSize) //either TextureSize or InputSize
-#define outsize vec4(OutputSize, 1.0 / OutputSize)
-
-COMPAT_VARYING vec2 precalc_texel;
-COMPAT_VARYING vec2 precalc_scale;
-
 void main()
 {
     gl_Position = MVPMatrix * VertexCoord;
     COL0 = COLOR;
     TEX0.xy = TexCoord.xy;
-
-    precalc_texel = vTexCoord * SourceSize.xy;
-    precalc_scale = max(floor(outsize.xy / InputSize.xy), vec2(1.0, 1.0));
 }
 
 #elif defined(FRAGMENT)
@@ -91,33 +102,32 @@ uniform COMPAT_PRECISION vec2 InputSize;
 uniform sampler2D Texture;
 COMPAT_VARYING vec4 TEX0;
 
-// fragment compatibility #defines
+// compatibility #defines
 #define Source Texture
 #define vTexCoord TEX0.xy
 #define texture(c, d) COMPAT_TEXTURE(c, d)
 #define SourceSize vec4(TextureSize, 1.0 / TextureSize) //either TextureSize or InputSize
 #define outsize vec4(OutputSize, 1.0 / OutputSize)
 
-COMPAT_VARYING vec2 precalc_texel;
-COMPAT_VARYING vec2 precalc_scale;
-
 void main()
 {
-   vec2 texel = precalc_texel;
-   vec2 scale = precalc_scale;
-
-   vec2 texel_floored = floor(texel);
-   vec2 s = fract(texel);
-   vec2 region_range = 0.5 - 0.5 / scale;
-
-   // Figure out where in the texel to sample to get correct pre-scaled bilinear.
-   // Uses the hardware bilinear interpolator to avoid having to sample 4 times manually.
-
-   vec2 center_dist = s - 0.5;
-   vec2 f = (center_dist - clamp(center_dist, -region_range, region_range)) * scale + 0.5;
-
-   vec2 mod_texel = texel_floored + f;
-
-   FragColor = vec4(texture(Source, mod_texel / SourceSize.xy).rgb, 1.0);
+   vec4 screen = pow(texture(Source, vTexCoord), vec4(target_gamma)).rgba;
+   vec4 avglum = vec4(0.5);
+   screen = mix(screen, avglum, (1.0 - contrast));
+   
+ //				r   g    b   black
+mat4 color = mat4(r,  rg,  rb, 0.0,  //red channel
+			   gr,  g,   gb, 0.0,  //green channel
+			   br,  bg,  b,  0.0,  //blue channel
+			  blr, blg, blb,    0.0); //alpha channel; these numbers do nothing for our purposes.
+			  
+mat4 adjust = mat4((1.0 - sat) * 0.3086 + sat, (1.0 - sat) * 0.3086, (1.0 - sat) * 0.3086, 1.0,
+(1.0 - sat) * 0.6094, (1.0 - sat) * 0.6094 + sat, (1.0 - sat) * 0.6094, 1.0,
+(1.0 - sat) * 0.0820, (1.0 - sat) * 0.0820, (1.0 - sat) * 0.0820 + sat, 1.0,
+0.0, 0.0, 0.0, 1.0);
+	color *= adjust;
+	screen = clamp(screen * lum, 0.0, 1.0);
+	screen = color * screen;
+	FragColor = pow(screen, vec4(1.0 / display_gamma));
 } 
 #endif

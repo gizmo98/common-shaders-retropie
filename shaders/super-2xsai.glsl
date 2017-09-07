@@ -16,6 +16,7 @@
 #else
 #define COMPAT_PRECISION
 #endif
+
 COMPAT_VARYING     float _frame_rotation;
 COMPAT_VARYING     vec4 _color1;
 struct output_dummy {
@@ -38,8 +39,8 @@ COMPAT_VARYING vec4 COL0;
 COMPAT_VARYING vec4 TEX0;
  
 uniform mat4 MVPMatrix;
-uniform int FrameDirection;
-uniform int FrameCount;
+uniform COMPAT_PRECISION int FrameDirection;
+uniform COMPAT_PRECISION int FrameCount;
 uniform COMPAT_PRECISION vec2 OutputSize;
 uniform COMPAT_PRECISION vec2 TextureSize;
 uniform COMPAT_PRECISION vec2 InputSize;
@@ -75,6 +76,7 @@ out vec4 FragColor;
 precision highp float;
 #else
 precision mediump float;
+precision mediump int;
 #endif
 #define COMPAT_PRECISION mediump
 #else
@@ -156,8 +158,8 @@ int _y0134;
 int _r0134;
 COMPAT_VARYING vec4 TEX0;
  
-uniform int FrameDirection;
-uniform int FrameCount;
+uniform COMPAT_PRECISION int FrameDirection;
+uniform COMPAT_PRECISION int FrameCount;
 uniform COMPAT_PRECISION vec2 OutputSize;
 uniform COMPAT_PRECISION vec2 TextureSize;
 uniform COMPAT_PRECISION vec2 InputSize;
